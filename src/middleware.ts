@@ -1,27 +1,38 @@
-import { NextRequest,NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export function middleware(request : NextRequest)
-{
-    const path=request.nextUrl.pathname;
+const PUBLIC_ROUTES = new Set(["/", "/login", "/signup", "/verify-code"]);
+const PUBLIC_FILE = /\.[^/]+$/;
 
-    const isPublicPath = path==='api/login' || path=='api/signup' || path ==='api/verify-code' || path === 'api/forgot-password' || path === 'api/reset-password';
+export function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl;
 
-    const token = request.cookies.get('token')?.value;
-
-    if(isPublicPath && token)
-    {
-        return NextResponse.redirect(new URL('/', request.url));
+    // Never run auth redirects for API routes, Next.js internals, or static files.
+    if (
+        pathname.startsWith("/api") ||
+        pathname.startsWith("/_next") ||
+        pathname === "/favicon.ico" ||
+        PUBLIC_FILE.test(pathname)
+    ) {
+        return NextResponse.next();
     }
 
-    if(!isPublicPath && !token)
-    {
-        return NextResponse.redirect(new URL('/login', request.url));
+    const token = request.cookies.get("token")?.value;
+    const isPublicRoute = PUBLIC_ROUTES.has(pathname);
 
+    // Logged-in users shouldn't see auth pages.
+    if (token && (pathname === "/login" || pathname === "/signup" || pathname === "/verify-code")) {
+        return NextResponse.redirect(new URL("/", request.url));
     }
+
+    // Unauthenticated users get sent to login for protected pages.
+    if (!token && !isPublicRoute) {
+        return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    return NextResponse.next();
 }
 
 export const config = {
-    matcher:[
-
-    ]
-}
+    // Only match non-API, non-static routes.
+    matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
